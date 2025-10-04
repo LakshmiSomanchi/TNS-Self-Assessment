@@ -20,11 +20,6 @@ if "responses" not in st.session_state:
 def get_questions():
     """
     Loads the entire survey questions dictionary.
-
-    This structure has been fixed to include all top-level sections
-    ("1. Animal Care", "2. Dairy Extension Services", "3. Procurement and Milk Quality", etc.)
-    at the main level. This is the critical fix that prevents the application from
-    skipping sections 2 and 3.
     """
     return {
         "Respondent and Location Details": {
@@ -215,7 +210,6 @@ def get_questions():
         }
     }
 
-
 QUESTIONS = get_questions()
 
 if "section_keys" not in st.session_state:
@@ -289,7 +283,7 @@ def show_questions_for_block(block_name, questions_data):
                     st.rerun()
         
         with col2:
-            is_last_step = st.session_state.step == len(st.session_state.section_keys) - 1
+            is_last_step = st.session_state.step == len(st.session_state.section_keys)
             button_text = "Review & Submit ➡️" if is_last_step else "Save and Next ➡️"
             if st.form_submit_button(button_text):
                 st.session_state.step += 1
@@ -330,8 +324,9 @@ elif 1 <= st.session_state.step <= len(st.session_state.section_keys):
     st.markdown(f"**Part {st.session_state.step} of {len(st.session_state.section_keys)}: {current_key}**")
     show_questions_for_block(current_key, QUESTIONS[current_key])
 
-# Final Step: Review and Submit
-elif st.session_state.step > len(st.session_state.section_keys):
+# Final Step: Review and Submit (Step N + 1)
+# N = len(st.session_state.section_keys), so this is N + 1
+elif st.session_state.step == len(st.session_state.section_keys) + 1: 
     st.title("Final Review and Submission")
     
     with st.form("final_submit_form"):
@@ -343,36 +338,81 @@ elif st.session_state.step > len(st.session_state.section_keys):
         }
 
         if not final_data:
-            st.warning("No responses were recorded.")
+            st.warning("No responses were recorded. Please go back and fill out the form.")
         else:
-            review_df = pd.DataFrame(final_data.items(), columns=["Question", "Response"])
-            st.dataframe(review_df, use_container_width=True)
+            # Display responses in a readable table
+            review_data = {
+                "Question": [k.split("|")[-1] for k in final_data.keys()],
+                "Response": list(final_data.values())
+            }
+            review_df = pd.DataFrame(review_data)
+            st.dataframe(review_df, use_container_width=True, hide_index=True)
 
-        c1, c2 = st.columns(2)
+        st.markdown("---")
+        c1, _, c2 = st.columns([1, 2, 1])
         with c1:
             if st.form_submit_button("⬅️ Back to Edit"):
-                st.session_state.step -= 1
+                # Go back to the last section for editing (Step N)
+                st.session_state.step = len(st.session_state.section_keys)
                 st.rerun()
         with c2:
             if st.form_submit_button("✅ Submit Final"):
-                final_data["submission_id"] = str(uuid.uuid4())
-                df_to_save = pd.DataFrame([final_data])
-                
-                try:
-                    header = not os.path.exists(CSV_FILE) or os.path.getsize(CSV_FILE) == 0
-                    df_to_save.to_csv(CSV_FILE, mode='a', header=header, index=False)
-                    st.session_state.step += 1
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Error saving file: {e}")
+                if not final_data:
+                    st.error("Cannot submit an empty form.")
+                else:
+                    # Append submission details
+                    final_data["submission_id"] = str(uuid.uuid4())
+                    final_data["submission_timestamp"] = datetime.now().isoformat()
+                    df_to_save = pd.DataFrame([final_data])
+                    
+                    try:
+                        header = not os.path.exists(CSV_FILE) or os.path.getsize(CSV_FILE) == 0
+                        df_to_save.to_csv(CSV_FILE, mode='a', header=header, index=False)
+                        st.session_state.step += 1 # Move to the confirmation page (Step N + 2)
+                        st.session_state.last_submission_successful = True
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error saving file: {e}")
+                        st.session_state.last_submission_successful = False
 
-# Confirmation Page
-else:
+# Confirmation Page (Submitted Options & Download) (Step N + 2)
+elif st.session_state.step == len(st.session_state.section_keys) + 2:
     st.balloons()
-    st.success("🙏 Thank you! Your responses have been submitted successfully.")
+    st.success("🎉 Thank you! Your responses have been submitted successfully.")
+    st.markdown("---")
+    
+    st.subheader("Submitted Options and Data")
+
+    # The code to make the CSV downloadable
+    try:
+        with open(CSV_FILE, "r") as f:
+            csv_content = f.read()
+            st.download_button(
+                label="⬇️ Download All Responses (CSV)",
+                data=csv_content,
+                file_name=CSV_FILE,
+                mime="text/csv",
+                key="download_submitted_data"
+            )
+    except FileNotFoundError:
+        st.warning("The responses file is not yet available for download (it will appear after the first submission).")
+    except Exception as e:
+        st.error(f"Could not read the CSV file for download: {e}")
+
+    st.markdown("---")
     
     if st.button("Start New Survey"):
         # Clear state to begin a new survey
         for key in list(st.session_state.keys()):
-            del st.session_state[key]
+            if key not in ["section_keys"]: # Keep permanent configuration keys
+                del st.session_state[key]
         st.rerun()
+        
+# Fallback for error state
+else:
+    st.error("An unexpected state occurred. Restarting the survey.")
+    # Reset application state
+    for key in list(st.session_state.keys()):
+        if key not in ["section_keys"]:
+            del st.session_state[key]
+    st.rerun()
