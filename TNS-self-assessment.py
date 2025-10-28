@@ -328,7 +328,17 @@ elif 1 <= st.session_state.step <= N:
 
 # --- Final Steps with Fixes ---
 
-# Final Step: Review and Submit (Step N + 1)
+# --- ENHANCEMENT SNIPPET FOR INDIVIDUAL DOWNLOAD ---
+
+# 1. Update the Final Submission Logic (Step N + 1)
+#    - Add: st.session_state.current_submission_data = final_data
+
+# 2. Update the Confirmation Page Logic (Step N + 2)
+#    - Add: Logic for creating and displaying the Individual Download button.
+
+# --- You will replace the existing code from 'elif st.session_state.step == N + 2:' 
+#     to the end of that block with this modified version.
+
 elif st.session_state.step == N + 1: 
     st.title("Final Review and Submission")
     
@@ -347,6 +357,114 @@ elif st.session_state.step == N + 1:
             st.warning("No complete responses were recorded. Please go back and fill out the form.")
             can_submit = False
         else:
+            # Display responses in a readable table
+            review_data = {
+                "Question": [k.split("|")[-1] for k in final_data.keys()],
+                "Response": list(final_data.values())
+            }
+            review_df = pd.DataFrame(review_data)
+            st.dataframe(review_df, use_container_width=True, hide_index=True)
+            can_submit = True
+
+
+        st.markdown("---")
+        c1, _, c2 = st.columns([1, 2, 1])
+        
+        with c1:
+            if st.form_submit_button("⬅️ Back to Edit"):
+                # Go back to the last section for editing (Step N)
+                st.session_state.step = N
+                st.rerun()
+        
+        with c2:
+            if st.form_submit_button("✅ Submit Final"):
+                if not can_submit:
+                    status_message.error("Cannot submit an empty form.")
+                else:
+                    # Show temporary status while saving
+                    with st.spinner('Saving and submitting responses...'):
+                        
+                        # Append submission details
+                        final_data["submission_id"] = str(uuid.uuid4())
+                        final_data["submission_timestamp"] = datetime.now().isoformat()
+                        
+                        # ⭐ ENHANCEMENT 1: Store individual data before saving to CSV
+                        st.session_state.current_submission_data = final_data 
+                        
+                        df_to_save = pd.DataFrame([final_data])
+                        
+                        try:
+                            # Save to CSV
+                            header = not os.path.exists(CSV_FILE) or os.path.getsize(CSV_FILE) == 0
+                            df_to_save.to_csv(CSV_FILE, mode='a', header=header, index=False)
+                            
+                            st.session_state.step = N + 2 # Move to the confirmation page
+                            st.rerun()
+                            
+                        except Exception as e:
+                            status_message.error(f"Error saving file: {e}")
+                            st.rerun() # Rerun to display error
+
+# Confirmation Page (Submitted Options & Download) (Step N + 2)
+elif st.session_state.step == N + 2:
+    st.balloons()
+    st.success("🎉 Thank you! Your responses have been submitted successfully.")
+    st.markdown("---")
+    
+    st.subheader("Submitted Options and Download")
+
+    # ⭐ ENHANCEMENT 2: Individual Download Button
+    individual_data = st.session_state.get("current_submission_data")
+    
+    if individual_data:
+        individual_df = pd.DataFrame([individual_data])
+        individual_csv = individual_df.to_csv(index=False).encode('utf-8')
+        
+        # Find the respondent's name for a dynamic file name
+        respondent_name_key = next((k for k in individual_data if k.endswith("|Name of the respondent")), None)
+        respondent_name = individual_data.get(respondent_name_key, "TNS_Respondent") if respondent_name_key else "TNS_Respondent"
+        
+        # Create a clean file name
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{respondent_name.replace(' ', '_').replace('/', '')}_Response_{timestamp}.csv"
+        
+        st.download_button(
+            label="⬇️ Download Your Individual Response (CSV)",
+            data=individual_csv,
+            file_name=filename,
+            mime="text/csv",
+            key="download_individual_response"
+        )
+
+        st.markdown("---")
+        
+    # The code to make the ALL RESPONSES CSV downloadable (Existing Code, slightly modified for brevity)
+    try:
+        # Read the file content for download
+        with open(CSV_FILE, "r") as f:
+            csv_content = f.read()
+            st.download_button(
+                label="⬇️ Download All Responses (CSV)",
+                data=csv_content,
+                file_name=CSV_FILE,
+                mime="text/csv",
+                key="download_submitted_data"
+            )
+    except FileNotFoundError:
+        st.warning("The responses file is not yet available. It will appear after the first submission.")
+    except Exception as e:
+        st.error(f"Could not read the CSV file for download: {e}")
+
+    st.markdown("---")
+    
+    if st.button("Start New Survey"):
+        # Clear state to begin a new survey, including the current_submission_data
+        for key in list(st.session_state.keys()):
+            if key not in ["section_keys"]: # Keep permanent configuration keys
+                del st.session_state[key]
+        st.rerun()      
+# Fallback for unexpected state (resets the app for safety)
+
             # Display responses in a readable table
             review_data = {
                 "Question": [k.split("|")[-1] for k in final_data.keys()],
