@@ -12,6 +12,7 @@ CSV_FILE = "self_assessment_TNS_responses.csv"
 
 if "step" not in st.session_state:
     st.session_state.step = 0  # Start at Step 0 (Consent)
+
 if "responses" not in st.session_state:
     st.session_state.responses = {}
 
@@ -216,6 +217,7 @@ if "section_keys" not in st.session_state:
     st.session_state.section_keys = list(QUESTIONS.keys())
 
 # --- Helper Functions ---
+
 def get_full_key(parent_key, question_label):
     return f"{parent_key}|{question_label}"
 
@@ -226,6 +228,42 @@ def get_default_index(options, saved_value):
         except ValueError:
             return 0
     return 0
+
+# ⭐ ENHANCEMENT: Function to get all possible column names from the questions dictionary
+def get_all_possible_column_names(questions_dict):
+    """
+    Recursively traverses the questions dictionary to generate a flat list of all
+    possible column names for the CSV file.
+    """
+    column_names = []
+    
+    def recurse(questions, parent_key=""):
+        # These are handled in the consent step and don't have remarks in the same way
+        excluded_from_remarks = [
+            "Consent to fill the form", "Signature of the respondent",
+            "Reviewed and confirmed by Route Incharge", "Signature of Route In charge",
+            "Reviewed and confirmed by Ksheersagar SPOC", "Signature of SPOC"
+        ]
+
+        for label, value in questions.items():
+            full_key = get_full_key(parent_key, label) if parent_key else label
+            
+            if isinstance(value, dict):
+                recurse(value, full_key)
+            else:
+                column_names.append(full_key)
+                if label not in excluded_from_remarks:
+                    column_names.append(f"{full_key}|Remarks")
+    
+    recurse(questions_dict)
+    
+    # Also add the submission metadata columns
+    column_names.extend(["submission_id", "submission_timestamp"])
+    
+    return column_names
+
+# ⭐ ENHANCEMENT: Define all possible CSV columns at the start
+ALL_COLUMNS = get_all_possible_column_names(QUESTIONS)
 
 def render_nested_questions(questions_data, parent_key=""):
     responses = st.session_state.responses
@@ -301,7 +339,7 @@ if st.session_state.step == 0:
         responses = st.session_state.responses
         consent_options = ["Yes", "No"]
         
-        # Pull consent and signature info into session state, even though it's technically part of section 1
+        # Pull consent and signature info into session state
         responses["Consent to fill the form"] = st.radio("Consent to fill the form", consent_options, index=0, key="consent-radio")
         responses["Signature of the respondent"] = st.text_input("Signature of the respondent", value=responses.get("Signature of the respondent", ""), key="signature-respondent")
         st.markdown("---")
@@ -353,13 +391,11 @@ elif st.session_state.step == N + 1:
             st.dataframe(review_df, use_container_width=True, hide_index=True)
             can_submit = True
 
-
         st.markdown("---")
         c1, _, c2 = st.columns([1, 2, 1])
         
         with c1:
             if st.form_submit_button("⬅️ Back to Edit"):
-                # Go back to the last section for editing (Step N)
                 st.session_state.step = N
                 st.rerun()
         
@@ -368,50 +404,47 @@ elif st.session_state.step == N + 1:
                 if not can_submit:
                     status_message.error("Cannot submit an empty form.")
                 else:
-                    # Show temporary status while saving
                     with st.spinner('Saving and submitting responses...'):
                         
                         # Append submission details
                         final_data["submission_id"] = str(uuid.uuid4())
                         final_data["submission_timestamp"] = datetime.now().isoformat()
                         
-                        # ⭐ ENHANCEMENT 1: Store individual data before saving to CSV
                         st.session_state.current_submission_data = final_data 
                         
+                        # ⭐ ENHANCEMENT: Ensure all columns are present and ordered correctly
                         df_to_save = pd.DataFrame([final_data])
+                        df_to_save = df_to_save.reindex(columns=ALL_COLUMNS) # Reorder and add missing columns
                         
                         try:
                             # Save to CSV
                             header = not os.path.exists(CSV_FILE) or os.path.getsize(CSV_FILE) == 0
                             df_to_save.to_csv(CSV_FILE, mode='a', header=header, index=False)
                             
-                            st.session_state.step = N + 2 # Move to the confirmation page
+                            st.session_state.step = N + 2
                             st.rerun()
                             
                         except Exception as e:
                             status_message.error(f"Error saving file: {e}")
-                            st.rerun() # Rerun to display error
 
-# Confirmation Page (Submitted Options & Download) (Step N + 2)
+# Confirmation Page (Step N + 2)
 elif st.session_state.step == N + 2:
     st.balloons()
     st.success("🎉 Thank you! Your responses have been submitted successfully.")
     st.markdown("---")
     
     st.subheader("Submitted Options and Download")
-
-    # ⭐ ENHANCEMENT 2: Individual Download Button
+    
+    # Individual Download Button
     individual_data = st.session_state.get("current_submission_data")
     
     if individual_data:
         individual_df = pd.DataFrame([individual_data])
         individual_csv = individual_df.to_csv(index=False).encode('utf-8')
         
-        # Find the respondent's name for a dynamic file name
         respondent_name_key = next((k for k in individual_data if k.endswith("|Name of the respondent")), None)
         respondent_name = individual_data.get(respondent_name_key, "TNS_Respondent") if respondent_name_key else "TNS_Respondent"
         
-        # Create a clean file name
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{respondent_name.replace(' ', '_').replace('/', '')}_Response_{timestamp}.csv"
         
@@ -422,12 +455,10 @@ elif st.session_state.step == N + 2:
             mime="text/csv",
             key="download_individual_response"
         )
-
         st.markdown("---")
         
-    # The code to make the ALL RESPONSES CSV downloadable (Existing Code, slightly modified for brevity)
+    # Download All Responses Button
     try:
-        # Read the file content for download
         with open(CSV_FILE, "r") as f:
             csv_content = f.read()
             st.download_button(
@@ -441,98 +472,16 @@ elif st.session_state.step == N + 2:
         st.warning("The responses file is not yet available. It will appear after the first submission.")
     except Exception as e:
         st.error(f"Could not read the CSV file for download: {e}")
-
     st.markdown("---")
     
     if st.button("Start New Survey"):
-        # Clear state to begin a new survey, including the current_submission_data
         for key in list(st.session_state.keys()):
-            if key not in ["section_keys"]: # Keep permanent configuration keys
-                del st.session_state[key]
-        st.rerun()      
-# Fallback for unexpected state (resets the app for safety)
-
-            # Display responses in a readable table
-            review_data = {
-                "Question": [k.split("|")[-1] for k in final_data.keys()],
-                "Response": list(final_data.values())
-            }
-            review_df = pd.DataFrame(review_data)
-            st.dataframe(review_df, use_container_width=True, hide_index=True)
-            can_submit = True
-
-
-        st.markdown("---")
-        c1, _, c2 = st.columns([1, 2, 1])
-        
-        with c1:
-            if st.form_submit_button("⬅️ Back to Edit"):
-                # Go back to the last section for editing (Step N)
-                st.session_state.step = N
-                st.rerun()
-        
-        with c2:
-            if st.form_submit_button("✅ Submit Final"):
-                if not can_submit:
-                    status_message.error("Cannot submit an empty form.")
-                else:
-                    # Show temporary status while saving
-                    with st.spinner('Saving and submitting responses...'):
-                        
-                        # Append submission details
-                        final_data["submission_id"] = str(uuid.uuid4())
-                        final_data["submission_timestamp"] = datetime.now().isoformat()
-                        df_to_save = pd.DataFrame([final_data])
-                        
-                        try:
-                            # Save to CSV
-                            header = not os.path.exists(CSV_FILE) or os.path.getsize(CSV_FILE) == 0
-                            df_to_save.to_csv(CSV_FILE, mode='a', header=header, index=False)
-                            
-                            st.session_state.step = N + 2 # Move to the confirmation page
-                            st.rerun()
-                            
-                        except Exception as e:
-                            status_message.error(f"Error saving file: {e}")
-                            st.rerun() # Rerun to display error
-
-# Confirmation Page (Submitted Options & Download) (Step N + 2)
-elif st.session_state.step == N + 2:
-    st.balloons()
-    st.success("🎉 Thank you! Your responses have been submitted successfully.")
-    st.markdown("---")
-    
-    st.subheader("Submitted Options and Download")
-
-    # The code to make the CSV downloadable
-    try:
-        # Read the file content for download
-        with open(CSV_FILE, "r") as f:
-            csv_content = f.read()
-            st.download_button(
-                label="⬇️ Download All Responses (CSV)",
-                data=csv_content,
-                file_name=CSV_FILE,
-                mime="text/csv",
-                key="download_submitted_data"
-            )
-    except FileNotFoundError:
-        st.warning("The responses file is not yet available. It will appear after the first submission.")
-    except Exception as e:
-        st.error(f"Could not read the CSV file for download: {e}")
-
-    st.markdown("---")
-    
-    if st.button("Start New Survey"):
-        # Clear state to begin a new survey
-        for key in list(st.session_state.keys()):
-            if key not in ["section_keys"]: # Keep permanent configuration keys
+            if key not in ["section_keys"]:
                 del st.session_state[key]
         st.rerun()
-        
-# Fallback for unexpected state (resets the app for safety)
+
+# Fallback for unexpected state
 else:
-    # This catches any unexpected step value other than 0 (which is handled above)
     if st.session_state.step != 0:
         st.error("Application in an unexpected state. Restarting survey from the beginning.")
         for key in list(st.session_state.keys()):
