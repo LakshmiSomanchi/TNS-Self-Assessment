@@ -229,7 +229,6 @@ def get_default_index(options, saved_value):
             return 0
     return 0
 
-# ⭐ ENHANCEMENT: Function to get all possible column names from the questions dictionary
 def get_all_possible_column_names(questions_dict):
     """
     Recursively traverses the questions dictionary to generate a flat list of all
@@ -238,7 +237,6 @@ def get_all_possible_column_names(questions_dict):
     column_names = []
     
     def recurse(questions, parent_key=""):
-        # These are handled in the consent step and don't have remarks in the same way
         excluded_from_remarks = [
             "Consent to fill the form", "Signature of the respondent",
             "Reviewed and confirmed by Route Incharge", "Signature of Route In charge",
@@ -257,12 +255,10 @@ def get_all_possible_column_names(questions_dict):
     
     recurse(questions_dict)
     
-    # Also add the submission metadata columns
     column_names.extend(["submission_id", "submission_timestamp"])
     
     return column_names
 
-# ⭐ ENHANCEMENT: Define all possible CSV columns at the start
 ALL_COLUMNS = get_all_possible_column_names(QUESTIONS)
 
 def render_nested_questions(questions_data, parent_key=""):
@@ -328,7 +324,7 @@ def show_questions_for_block(block_name, questions_data):
                 st.rerun()
 
 # --- Application Flow ---
-N = len(st.session_state.section_keys) # Total number of survey sections
+N = len(st.session_state.section_keys)
 
 # Step 0: Consent Form
 if st.session_state.step == 0:
@@ -339,7 +335,6 @@ if st.session_state.step == 0:
         responses = st.session_state.responses
         consent_options = ["Yes", "No"]
         
-        # Pull consent and signature info into session state
         responses["Consent to fill the form"] = st.radio("Consent to fill the form", consent_options, index=0, key="consent-radio")
         responses["Signature of the respondent"] = st.text_input("Signature of the respondent", value=responses.get("Signature of the respondent", ""), key="signature-respondent")
         st.markdown("---")
@@ -364,6 +359,7 @@ elif 1 <= st.session_state.step <= N:
     st.markdown(f"**Part {st.session_state.step} of {N}: {current_key}**")
     show_questions_for_block(current_key, QUESTIONS[current_key])
 
+# Step N+1: Final Review and Submission
 elif st.session_state.step == N + 1: 
     st.title("Final Review and Submission")
     
@@ -372,7 +368,6 @@ elif st.session_state.step == N + 1:
     with st.form("final_submit_form"):
         st.subheader("Review Your Responses")
         
-        # Prepare data for review display and final submission
         final_data = {
             k: ("; ".join(map(str, v)) if isinstance(v, list) else str(v))
             for k, v in st.session_state.responses.items() if v not in [None, "", []]
@@ -382,7 +377,6 @@ elif st.session_state.step == N + 1:
             st.warning("No complete responses were recorded. Please go back and fill out the form.")
             can_submit = False
         else:
-            # Display responses in a readable table
             review_data = {
                 "Question": [k.split("|")[-1] for k in final_data.keys()],
                 "Response": list(final_data.values())
@@ -406,18 +400,15 @@ elif st.session_state.step == N + 1:
                 else:
                     with st.spinner('Saving and submitting responses...'):
                         
-                        # Append submission details
                         final_data["submission_id"] = str(uuid.uuid4())
                         final_data["submission_timestamp"] = datetime.now().isoformat()
                         
                         st.session_state.current_submission_data = final_data 
                         
-                        # ⭐ ENHANCEMENT: Ensure all columns are present and ordered correctly
                         df_to_save = pd.DataFrame([final_data])
-                        df_to_save = df_to_save.reindex(columns=ALL_COLUMNS) # Reorder and add missing columns
+                        df_to_save = df_to_save.reindex(columns=ALL_COLUMNS)
                         
                         try:
-                            # Save to CSV
                             header = not os.path.exists(CSV_FILE) or os.path.getsize(CSV_FILE) == 0
                             df_to_save.to_csv(CSV_FILE, mode='a', header=header, index=False)
                             
@@ -427,7 +418,7 @@ elif st.session_state.step == N + 1:
                         except Exception as e:
                             status_message.error(f"Error saving file: {e}")
 
-# Confirmation Page (Step N + 2)
+# Step N+2: Confirmation Page
 elif st.session_state.step == N + 2:
     st.balloons()
     st.success("🎉 Thank you! Your responses have been submitted successfully.")
@@ -435,7 +426,6 @@ elif st.session_state.step == N + 2:
     
     st.subheader("Submitted Options and Download")
     
-    # Individual Download Button
     individual_data = st.session_state.get("current_submission_data")
     
     if individual_data:
@@ -457,7 +447,6 @@ elif st.session_state.step == N + 2:
         )
         st.markdown("---")
         
-    # Download All Responses Button
     try:
         with open(CSV_FILE, "r") as f:
             csv_content = f.read()
