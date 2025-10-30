@@ -537,12 +537,12 @@ elif st.session_state.step == N + 2:
     st.markdown("---")
     
     if st.button("Start New Survey"):
-        # Clear state to begin a new survey
+        # Clear state to begin a new survey, including the current_submission_data
         for key in list(st.session_state.keys()):
             if key not in ["section_keys"]: # Keep permanent configuration keys
                 del st.session_state[key]
-        st.rerun()
-        
+        st.rerun()      
+
 # Fallback for unexpected state (resets the app for safety)
 else:
     # This catches any unexpected step value other than 0 (which is handled above)
