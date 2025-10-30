@@ -488,10 +488,3 @@ else:
             if key not in ["section_keys"]:
                 del st.session_state[key]
         st.rerun()
-if st.button("Start New Survey"):
-    # Clear state to begin a new survey
-    for key in list(st.session_state.keys()):
-        # Keep permanent configuration keys like 'section_keys'
-        if key not in ["section_keys"]:
-            del st.session_state[key]
-    st.rerun()
