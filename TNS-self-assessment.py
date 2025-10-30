@@ -466,7 +466,7 @@ elif st.session_state.step == N + 2:
 # Fallback for unexpected state (resets the app for safety)
 
             # Display responses in a readable table
-            review_data = {
+        review_data = {
                 "Question": [k.split("|")[-1] for k in final_data.keys()],
                 "Response": list(final_data.values())
             }
