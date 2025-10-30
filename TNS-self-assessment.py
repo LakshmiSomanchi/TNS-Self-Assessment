@@ -326,19 +326,6 @@ elif 1 <= st.session_state.step <= N:
     st.markdown(f"**Part {st.session_state.step} of {N}: {current_key}**")
     show_questions_for_block(current_key, QUESTIONS[current_key])
 
-# --- Final Steps with Fixes ---
-
-# --- ENHANCEMENT SNIPPET FOR INDIVIDUAL DOWNLOAD ---
-
-# 1. Update the Final Submission Logic (Step N + 1)
-#    - Add: st.session_state.current_submission_data = final_data
-
-# 2. Update the Confirmation Page Logic (Step N + 2)
-#    - Add: Logic for creating and displaying the Individual Download button.
-
-# --- You will replace the existing code from 'elif st.session_state.step == N + 2:' 
-#     to the end of that block with this modified version.
-
 elif st.session_state.step == N + 1: 
     st.title("Final Review and Submission")
     
@@ -466,7 +453,7 @@ elif st.session_state.step == N + 2:
 # Fallback for unexpected state (resets the app for safety)
 
             # Display responses in a readable table
-        review_data = {
+            review_data = {
                 "Question": [k.split("|")[-1] for k in final_data.keys()],
                 "Response": list(final_data.values())
             }
@@ -537,12 +524,12 @@ elif st.session_state.step == N + 2:
     st.markdown("---")
     
     if st.button("Start New Survey"):
-        # Clear state to begin a new survey, including the current_submission_data
+        # Clear state to begin a new survey
         for key in list(st.session_state.keys()):
             if key not in ["section_keys"]: # Keep permanent configuration keys
                 del st.session_state[key]
-        st.rerun()      
-
+        st.rerun()
+        
 # Fallback for unexpected state (resets the app for safety)
 else:
     # This catches any unexpected step value other than 0 (which is handled above)
