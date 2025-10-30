@@ -326,19 +326,6 @@ elif 1 <= st.session_state.step <= N:
     st.markdown(f"**Part {st.session_state.step} of {N}: {current_key}**")
     show_questions_for_block(current_key, QUESTIONS[current_key])
 
-# --- Final Steps with Fixes ---
-
-# --- ENHANCEMENT SNIPPET FOR INDIVIDUAL DOWNLOAD ---
-
-# 1. Update the Final Submission Logic (Step N + 1)
-#    - Add: st.session_state.current_submission_data = final_data
-
-# 2. Update the Confirmation Page Logic (Step N + 2)
-#    - Add: Logic for creating and displaying the Individual Download button.
-
-# --- You will replace the existing code from 'elif st.session_state.step == N + 2:' 
-#     to the end of that block with this modified version.
-
 elif st.session_state.step == N + 1: 
     st.title("Final Review and Submission")
     
