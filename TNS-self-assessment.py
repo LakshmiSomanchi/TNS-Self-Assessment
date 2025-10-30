@@ -442,17 +442,8 @@ elif st.session_state.step == N + 2:
     except Exception as e:
         st.error(f"Could not read the CSV file for download: {e}")
 
-    st.markdown("---")
-    
-    if st.button("Start New Survey"):
-        # Clear state to begin a new survey, including the current_submission_data
-        for key in list(st.session_state.keys()):
-            if key not in ["section_keys"]: # Keep permanent configuration keys
-                del st.session_state[key]
-        st.rerun()      
-# Fallback for unexpected state (resets the app for safety)
+    st.markdown("---")      
 
-            # Display responses in a readable table
             review_data = {
                 "Question": [k.split("|")[-1] for k in final_data.keys()],
                 "Response": list(final_data.values())
